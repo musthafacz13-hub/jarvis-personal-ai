@@ -12,3 +12,4 @@
 - [x] Add deterministic unit tests for command parsing and action confirmations.
 - [x] Validate the mobile app and prepare Mac sideloading instructions.
 - [x] Replace bundled native icon assets with a compact storage-compliant PNG and save the final checkpoint.
+- [ ] Create a new private GitHub repository and push the completed Jarvis project.
