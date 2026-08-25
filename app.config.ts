@@ -28,11 +28,11 @@ const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
   // App branding - update these values directly (do not use env vars)
-  appName: "Jarvis Personal AI",
+  appName: "Jarvis",
   appSlug: "jarvis-personal-ai",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "",
+  logoUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663822568393/WumwefVrhDmkQEJb.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
@@ -51,8 +51,10 @@ const config: ExpoConfig = {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
     "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+      "ITSAppUsesNonExemptEncryption": false,
+      "NSCalendarsFullAccessUsageDescription": "Jarvis uses your calendar to prepare your agenda and add events you approve.",
+      "NSRemindersFullAccessUsageDescription": "Jarvis uses your reminders to show tasks and create reminders you approve."
+    }
   },
   android: {
     adaptiveIcon: {
@@ -92,6 +94,21 @@ const config: ExpoConfig = {
         microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
       },
     ],
+    [
+      "expo-calendar",
+      {
+        calendarPermission: "Allow $(PRODUCT_NAME) to access your calendar for agenda briefings and approved events.",
+        remindersPermission: "Allow $(PRODUCT_NAME) to access your reminders for task briefings and approved reminders."
+      }
+    ],
+    [
+      "expo-speech-recognition",
+      {
+        microphonePermission: "Allow $(PRODUCT_NAME) to use the microphone for tap-to-talk commands.",
+        speechRecognitionPermission: "Allow $(PRODUCT_NAME) to recognize speech for your Jarvis commands."
+      }
+    ],
+    "expo-notifications",
     [
       "expo-video",
       {

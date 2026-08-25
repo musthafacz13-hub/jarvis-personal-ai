@@ -1,48 +1,32 @@
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
-
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import * as Speech from "expo-speech";
 import { ScreenContainer } from "@/components/screen-container";
+import { AgendaRow } from "@/components/agenda-item";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useVoiceSession } from "@/hooks/use-voice-session";
+import { describeDraft, interpretCommand } from "@/lib/jarvis-command";
+import { useJarvis } from "@/lib/jarvis-context";
+import type { CommandResult } from "@/lib/jarvis-types";
 
-/**
- * Home Screen - NativeWind Example
- *
- * This template uses NativeWind (Tailwind CSS for React Native).
- * You can use familiar Tailwind classes directly in className props.
- *
- * Key patterns:
- * - Use `className` instead of `style` for most styling
- * - Theme colors: use tokens directly (bg-background, text-foreground, bg-primary, etc.); no dark: prefix needed
- * - Responsive: standard Tailwind breakpoints work on web
- * - Custom colors defined in tailwind.config.js
- */
 export default function HomeScreen() {
-  return (
-    <ScreenContainer className="p-6">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 gap-8">
-          {/* Hero Section */}
-          <View className="items-center gap-2">
-            <Text className="text-4xl font-bold text-foreground">Welcome</Text>
-            <Text className="text-base text-muted text-center">
-              Edit app/(tabs)/index.tsx to get started
-            </Text>
-          </View>
-
-          {/* Example Card */}
-          <View className="w-full max-w-sm self-center bg-surface rounded-2xl p-6 shadow-sm border border-border">
-            <Text className="text-lg font-semibold text-foreground mb-2">NativeWind Ready</Text>
-            <Text className="text-sm text-muted leading-relaxed">
-              Use Tailwind CSS classes directly in your React Native components.
-            </Text>
-          </View>
-
-          {/* Example Button */}
-          <View className="items-center">
-            <TouchableOpacity className="bg-primary px-6 py-3 rounded-full active:opacity-80">
-              <Text className="text-background font-semibold">Get Started</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </ScreenContainer>
-  );
+  const { agenda, permissions, isRefreshing, executeDraft, spokenResponses, requestAccess } = useJarvis();
+  const [command, setCommand] = useState(""); const [pending, setPending] = useState<CommandResult | null>(null); const [response, setResponse] = useState("At your service. Tap the orb and tell me what you need."); const [isExecuting, setIsExecuting] = useState(false);
+  const nextEvent = useMemo(() => agenda.find((item) => item.kind === "event") ?? null, [agenda]); const openTasks = useMemo(() => agenda.filter((item) => item.kind === "reminder" && !item.completed).length, [agenda]);
+  const speak = (text: string) => { if (!spokenResponses) return; Speech.stop(); Speech.speak(text, { language: "en-US", rate: 0.92, pitch: 0.86 }); };
+  const handleCommand = (value: string) => { if (!value.trim()) return; const result = interpretCommand(value); setCommand(value); if (result.requiresConfirmation) setPending(result); else { setResponse(result.response); speak(result.response); if (result.draft.kind === "agenda") executeDraft(result.draft).catch(() => undefined); } };
+  const voice = useVoiceSession({ onFinalTranscript: handleCommand });
+  const confirm = async () => { if (!pending) return; setIsExecuting(true); try { const result = await executeDraft(pending.draft); setResponse(result); setPending(null); setCommand(""); speak(result); } catch (error) { const message = error instanceof Error ? error.message : "I could not complete that request."; setResponse(message); speak(message); } finally { setIsExecuting(false); } };
+  return <ScreenContainer className="px-5" containerClassName="bg-background"><ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <View style={styles.topline}><View><Text style={styles.eyebrow}>PERSONAL ASSISTANT</Text><Text style={styles.title}>Good afternoon.</Text></View><View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>READY</Text></View></View>
+    <View style={styles.responseCard}><IconSymbol name="sparkles" size={20} color="#67E8F9" /><Text style={styles.responseText}>{response}</Text></View>
+    {permissions.calendar !== "granted" && <Pressable onPress={requestAccess} style={({ pressed }) => [styles.permissionCard, pressed && styles.pressed]}><View style={styles.permissionIcon}><IconSymbol name="calendar" size={18} color="#FBBF24" /></View><View style={styles.permissionCopy}><Text style={styles.permissionTitle}>Connect your iPhone data</Text><Text style={styles.permissionText}>Allow Calendar, Reminders, and alerts to activate your live briefing.</Text></View><Text style={styles.connect}>CONNECT</Text></Pressable>}
+    <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>AT A GLANCE</Text><Text style={styles.sectionMeta}>{isRefreshing ? "UPDATING" : "LIVE"}</Text></View>
+    <View style={styles.briefGrid}><View style={styles.briefCard}><Text style={styles.cardLabel}>NEXT EVENT</Text><Text style={styles.cardValue} numberOfLines={2}>{nextEvent?.title ?? "No upcoming event"}</Text><Text style={styles.cardMeta}>{nextEvent?.startsAt ? new Date(nextEvent.startsAt).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }) : "Your calendar is clear"}</Text></View><View style={styles.briefCard}><Text style={styles.cardLabel}>OPEN TASKS</Text><Text style={styles.numberValue}>{openTasks}</Text><Text style={styles.cardMeta}>reminders awaiting you</Text></View></View>
+    <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>UP NEXT</Text><Text style={styles.sectionMeta}>{agenda.length} ITEMS</Text></View><View style={styles.listCard}>{agenda.slice(0, 3).map((item, index) => <View key={item.id} style={index ? styles.divider : undefined}><AgendaRow item={item} /></View>)}{!agenda.length && <Text style={styles.emptyText}>Your connected agenda will appear here. Jarvis never invents appointments or tasks.</Text>}</View>
+    <View style={styles.commandBox}><TextInput value={command} onChangeText={setCommand} onSubmitEditing={() => handleCommand(command)} placeholder="Type a command for Jarvis" placeholderTextColor="#64748B" returnKeyType="send" style={styles.commandInput} /><Pressable onPress={() => handleCommand(command)} style={({ pressed }) => [styles.sendButton, pressed && styles.pressed]}><IconSymbol name="paperplane.fill" size={18} color="#0B1020" /></Pressable></View>
+    {(voice.transcript || voice.error) && <Text style={voice.error ? styles.errorText : styles.transcriptText}>{voice.error ?? `“${voice.transcript}”`}</Text>}
+    <View style={styles.orbWrap}><Pressable accessibilityLabel={voice.isListening ? "Stop listening" : "Start talking to Jarvis"} onPress={voice.isListening ? voice.stop : voice.start} style={({ pressed }) => [styles.orb, voice.isListening && styles.orbActive, pressed && { transform: [{ scale: 0.97 }] }]}>{voice.isListening ? <ActivityIndicator color="#0B1020" size="large" /> : <IconSymbol name="mic.fill" size={34} color="#0B1020" />}</Pressable><Text style={styles.orbLabel}>{voice.isListening ? "Listening… tap to finish" : "Tap to speak"}</Text></View>
+  </ScrollView><Modal transparent visible={Boolean(pending)} animationType="slide" onRequestClose={() => setPending(null)}><View style={styles.modalOverlay}><View style={styles.modalCard}><View style={styles.modalHandle} /><Text style={styles.modalEyebrow}>REVIEW COMMAND</Text><Text style={styles.modalTitle}>Shall I proceed?</Text><Text style={styles.modalBody}>{pending ? describeDraft(pending) : ""}</Text><Text style={styles.modalNote}>Jarvis will make this change only after you confirm.</Text><Pressable onPress={confirm} disabled={isExecuting} style={({ pressed }) => [styles.confirmButton, pressed && styles.pressed]}>{isExecuting ? <ActivityIndicator color="#0B1020" /> : <Text style={styles.confirmText}>CONFIRM</Text>}</Pressable><Pressable onPress={() => setPending(null)} disabled={isExecuting} style={({ pressed }) => [styles.cancelButton, pressed && styles.pressed]}><Text style={styles.cancelText}>CANCEL</Text></Pressable></View></View></Modal></ScreenContainer>;
 }
+const styles = StyleSheet.create({ content: { paddingTop: 12, paddingBottom: 28, gap: 18 }, topline: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingTop: 4 }, eyebrow: { color: "#38BDF8", fontSize: 10, fontWeight: "800", letterSpacing: 1.4 }, title: { color: "#F8FAFC", fontSize: 31, fontWeight: "700", lineHeight: 39, marginTop: 4 }, statusPill: { flexDirection: "row", gap: 6, alignItems: "center", backgroundColor: "#102A28", borderRadius: 20, paddingVertical: 7, paddingHorizontal: 10 }, statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#34D399" }, statusText: { color: "#78E5C1", fontSize: 10, fontWeight: "800", letterSpacing: 0.8 }, responseCard: { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: "#101A33", borderWidth: 1, borderColor: "#263553", borderRadius: 18, padding: 16 }, responseText: { flex: 1, color: "#D9E7F3", fontSize: 15, lineHeight: 21 }, permissionCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#2A2418", borderWidth: 1, borderColor: "#5A4825", borderRadius: 16, padding: 14 }, permissionIcon: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 18, backgroundColor: "#3B2F19" }, permissionCopy: { flex: 1, gap: 3 }, permissionTitle: { color: "#FEF3C7", fontSize: 14, fontWeight: "700" }, permissionText: { color: "#D7C898", fontSize: 12, lineHeight: 17 }, connect: { color: "#FCD34D", fontSize: 10, fontWeight: "800", letterSpacing: 0.7 }, sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 }, sectionTitle: { color: "#B7C8D9", fontSize: 11, fontWeight: "800", letterSpacing: 1.1 }, sectionMeta: { color: "#64748B", fontSize: 10, fontWeight: "800", letterSpacing: 0.8 }, briefGrid: { flexDirection: "row", gap: 12 }, briefCard: { flex: 1, minHeight: 122, justifyContent: "space-between", backgroundColor: "#101A33", borderWidth: 1, borderColor: "#263553", borderRadius: 18, padding: 15 }, cardLabel: { color: "#64748B", fontSize: 10, fontWeight: "800", letterSpacing: 0.8 }, cardValue: { color: "#F8FAFC", fontSize: 16, fontWeight: "700", lineHeight: 21 }, numberValue: { color: "#67E8F9", fontSize: 34, fontWeight: "700", lineHeight: 38 }, cardMeta: { color: "#94A3B8", fontSize: 11, lineHeight: 15 }, listCard: { backgroundColor: "#101A33", borderWidth: 1, borderColor: "#263553", borderRadius: 18, paddingHorizontal: 15 }, divider: { borderTopWidth: 1, borderTopColor: "#263553" }, emptyText: { color: "#94A3B8", fontSize: 14, lineHeight: 20, paddingVertical: 22 }, commandBox: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#101A33", borderWidth: 1, borderColor: "#334155", borderRadius: 16, padding: 7 }, commandInput: { flex: 1, color: "#F8FAFC", fontSize: 14, paddingHorizontal: 8, paddingVertical: 9 }, sendButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: "#67E8F9" }, transcriptText: { color: "#94A3B8", fontSize: 12, fontStyle: "italic", textAlign: "center" }, errorText: { color: "#FCA5A5", fontSize: 12, lineHeight: 17, textAlign: "center" }, orbWrap: { alignItems: "center", paddingTop: 3, gap: 10 }, orb: { width: 92, height: 92, borderRadius: 46, backgroundColor: "#67E8F9", borderWidth: 8, borderColor: "#15314A", alignItems: "center", justifyContent: "center", shadowColor: "#38BDF8", shadowOpacity: 0.55, shadowRadius: 22, elevation: 7 }, orbActive: { backgroundColor: "#FCD34D", borderColor: "#3B2F19" }, orbLabel: { color: "#B7C8D9", fontSize: 12, fontWeight: "600" }, modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(2, 6, 23, 0.66)" }, modalCard: { backgroundColor: "#101A33", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 34, gap: 13 }, modalHandle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: "#475569", marginBottom: 3 }, modalEyebrow: { color: "#38BDF8", fontSize: 10, fontWeight: "800", letterSpacing: 1.1 }, modalTitle: { color: "#F8FAFC", fontSize: 25, fontWeight: "700" }, modalBody: { color: "#D9E7F3", fontSize: 16, lineHeight: 23 }, modalNote: { color: "#94A3B8", fontSize: 13, lineHeight: 19 }, confirmButton: { height: 52, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "#67E8F9", marginTop: 5 }, confirmText: { color: "#0B1020", fontSize: 13, fontWeight: "900", letterSpacing: 1 }, cancelButton: { height: 46, alignItems: "center", justifyContent: "center" }, cancelText: { color: "#94A3B8", fontSize: 13, fontWeight: "800", letterSpacing: 0.8 }, pressed: { opacity: 0.78 } });
